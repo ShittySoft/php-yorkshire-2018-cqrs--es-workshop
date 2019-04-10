@@ -148,7 +148,15 @@ call_user_func(function () {
         }
     });
 
-    $app->post('/checkin/{buildingId}', new class () implements RequestHandlerInterface {
+    $app->post('/checkin/{buildingId}', new class ($serviceContainer->get(CommandBus::class)) implements RequestHandlerInterface {
+        /** @var CommandBus */
+        private $commandBus;
+
+        public function __construct(CommandBus $commandBus)
+        {
+            $this->commandBus = $commandBus;
+        }
+
         public function handle(Request $request) : Response
         {
 
@@ -156,7 +164,15 @@ call_user_func(function () {
     });
 
 
-    $app->post('/checkout/{buildingId}', new class () implements RequestHandlerInterface {
+    $app->post('/checkout/{buildingId}', new class ($serviceContainer->get(CommandBus::class)) implements RequestHandlerInterface {
+        /** @var CommandBus */
+        private $commandBus;
+
+        public function __construct(CommandBus $commandBus)
+        {
+            $this->commandBus = $commandBus;
+        }
+
         public function handle(Request $request) : Response
         {
 
