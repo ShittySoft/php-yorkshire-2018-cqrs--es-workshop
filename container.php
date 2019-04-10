@@ -4,11 +4,6 @@ declare(strict_types=1);
 
 namespace Building\App;
 
-use Bernard\Driver\FlatFileDriver;
-use Bernard\Producer;
-use Bernard\Queue;
-use Bernard\QueueFactory;
-use Bernard\QueueFactory\PersistentFactory;
 use Building\Domain\Aggregate\Building;
 use Building\Domain\Command;
 use Building\Domain\Repository\BuildingRepositoryInterface;
@@ -17,7 +12,6 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Driver\PDOSqlite\Driver;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Schema\SchemaException;
-use Interop\Container\ContainerInterface;
 use Prooph\Common\Event\ActionEvent;
 use Prooph\Common\Event\ActionEventEmitter;
 use Prooph\Common\Event\ActionEventListenerAggregate;
@@ -33,14 +27,11 @@ use Prooph\EventStore\Aggregate\AggregateType;
 use Prooph\EventStore\EventStore;
 use Prooph\EventStoreBusBridge\EventPublisher;
 use Prooph\EventStoreBusBridge\TransactionManager;
-use Prooph\ServiceBus\Async\MessageProducer;
 use Prooph\ServiceBus\CommandBus;
 use Prooph\ServiceBus\EventBus;
-use Prooph\ServiceBus\Message\Bernard\BernardMessageProducer;
-use Prooph\ServiceBus\Message\Bernard\BernardSerializer;
 use Prooph\ServiceBus\MessageBus;
 use Prooph\ServiceBus\Plugin\ServiceLocatorPlugin;
-use Symfony\Component\EventDispatcher\EventDispatcher;
+use Psr\Container\ContainerInterface;
 use Zend\ServiceManager\ServiceManager;
 
 require_once __DIR__ . '/vendor/autoload.php';
@@ -79,6 +70,8 @@ return new ServiceManager([
                 new ProophActionEventEmitter()
             );
 
+            // This listener forwards events to a listener service called exactly like the event.
+            // Please note that the service must be a {{@see callable[]}}
             $eventBus->utilize(new class ($container, $container) implements ActionEventListenerAggregate
             {
                 /**
@@ -140,6 +133,8 @@ return new ServiceManager([
         CommandBus::class                  => function (ContainerInterface $container) : CommandBus {
             $commandBus = new CommandBus();
 
+            // Following configuration makes sure that commands are dispatched by command handler services
+            // called exactly like the command class name. The handler must be a {{@see callable}}.
             $commandBus->utilize(new ServiceLocatorPlugin($container));
             $commandBus->utilize(new class implements ActionEventListenerAggregate {
                 public function attach(ActionEventEmitter $dispatcher)
@@ -169,29 +164,9 @@ return new ServiceManager([
             return $commandBus;
         },
 
-        // ignore this - this is async stuff
-        // we'll get to it later
-
-        QueueFactory::class => function () : QueueFactory {
-            return new PersistentFactory(
-                new FlatFileDriver(__DIR__ . '/data/bernard'),
-                new BernardSerializer(new FQCNMessageFactory(), new NoOpMessageConverter())
-            );
-        },
-
-        Queue::class => function (ContainerInterface $container) : Queue {
-            return $container->get(QueueFactory::class)->create('commands');
-        },
-
-        MessageProducer::class => function (ContainerInterface $container) : MessageProducer {
-            return new BernardMessageProducer(
-                new Producer($container->get(QueueFactory::class),new EventDispatcher()),
-                'commands'
-            );
-        },
-
         // Command -> CommandHandlerFactory
         // this is where most of the work will be done (by you!)
+        // Each command is a `function (CommandClass) : void`
         Command\RegisterNewBuilding::class => function (ContainerInterface $container) : callable {
             $buildings = $container->get(BuildingRepositoryInterface::class);
 
@@ -199,6 +174,9 @@ return new ServiceManager([
                 $buildings->add(Building::new($command->name()));
             };
         },
+
+
+        // Our concrete repository implementation
         BuildingRepositoryInterface::class => function (ContainerInterface $container) : BuildingRepositoryInterface {
             return new BuildingRepository(
                 new AggregateRepository(
