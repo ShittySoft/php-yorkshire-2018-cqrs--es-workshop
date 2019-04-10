@@ -6,8 +6,8 @@ namespace Building\App;
 
 use Building\Domain\Aggregate\Building;
 use Building\Domain\Command;
-use Building\Domain\Repository\BuildingRepositoryInterface;
-use Building\Infrastructure\Repository\BuildingRepository;
+use Building\Domain\Repository\Buildings;
+use Building\Infrastructure\Repository\BuildingsFromAggregateRepository;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Driver\PDOSqlite\Driver;
 use Doctrine\DBAL\DriverManager;
@@ -174,7 +174,7 @@ return new ServiceManager([
         // this is where most of the work will be done (by you!)
         // Each command is a `function (CommandClass) : void`
         Command\RegisterNewBuilding::class => static function (ContainerInterface $container) : callable {
-            $buildings = $container->get(BuildingRepositoryInterface::class);
+            $buildings = $container->get(Buildings::class);
 
             return static function (Command\RegisterNewBuilding $command) use ($buildings) {
                 $buildings->add(Building::new($command->name()));
@@ -182,9 +182,9 @@ return new ServiceManager([
         },
 
         // Our concrete repository implementation
-        BuildingRepositoryInterface::class => static function (ContainerInterface $container
-        ) : BuildingRepositoryInterface {
-            return new BuildingRepository(
+        Buildings::class                   => static function (ContainerInterface $container
+        ) : Buildings {
+            return new BuildingsFromAggregateRepository(
                 new AggregateRepository(
                     $container->get(EventStore::class),
                     AggregateType::fromAggregateRootClass(Building::class),

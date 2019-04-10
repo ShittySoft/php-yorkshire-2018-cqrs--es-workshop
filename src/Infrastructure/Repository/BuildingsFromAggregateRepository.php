@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Building\Infrastructure\Repository;
 
 use Building\Domain\Aggregate\Building;
-use Building\Domain\Repository\BuildingRepositoryInterface;
+use Building\Domain\Repository\Buildings;
 use Prooph\EventStore\Aggregate\AggregateRepository;
 use Rhumsaa\Uuid\Uuid;
 use function assert;
 
-final class BuildingRepository implements BuildingRepositoryInterface
+final class BuildingsFromAggregateRepository implements Buildings
 {
     /** @var AggregateRepository */
     private $aggregateRepository;
