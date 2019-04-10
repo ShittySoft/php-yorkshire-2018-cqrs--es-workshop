@@ -8,74 +8,153 @@ use Building\Domain\Command;
 use Prooph\ServiceBus\CommandBus;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
+use Psr\Http\Server\MiddlewareInterface;
+use Psr\Http\Server\RequestHandlerInterface;
 use Rhumsaa\Uuid\Uuid;
-use Whoops\Handler\PrettyPageHandler;
-use Whoops\Run;
+use Zend\Diactoros\Response as DiactorosResponse;
+use Zend\Diactoros\ServerRequestFactory;
 use Zend\Expressive\Application;
+use Zend\Expressive\MiddlewareContainer;
+use Zend\Expressive\MiddlewareFactory;
 use Zend\Expressive\Router\FastRouteRouter;
-use Zend\Expressive\WhoopsErrorHandler;
+use Zend\Expressive\Router\Middleware\DispatchMiddleware;
+use Zend\Expressive\Router\Middleware\RouteMiddleware;
+use Zend\Expressive\Router\RouteCollector;
+use Zend\HttpHandlerRunner\Emitter\SapiEmitter;
+use Zend\HttpHandlerRunner\RequestHandlerRunner;
+use Zend\Stratigility\MiddlewarePipe;
 
 call_user_func(function () {
     error_reporting(E_ALL);
     ini_set('display_errors', '1');
 
-    $sm = require __DIR__ . '/../container.php';
+    $serviceContainer = require __DIR__ . '/../container.php';
 
     //////////////////////////
     // Routing/frontend/etc //
     //////////////////////////
 
-    // Error handling so that our eyes don't bleed: don't do this in production!
-    $whoopsHandler = new PrettyPageHandler();
-    $whoops        = new Run();
+    $pipeline = new MiddlewarePipe();
+    $router   = new FastRouteRouter();
 
-    $whoops->writeToOutput(false);
-    $whoops->allowQuit(false);
-    $whoops->pushHandler($whoopsHandler);
+    $app = new Application(
+        new MiddlewareFactory(new MiddlewareContainer($serviceContainer)),
+        $pipeline,
+        new RouteCollector($router),
+        new RequestHandlerRunner(
+            $pipeline,
+            new SapiEmitter(),
+            [ServerRequestFactory::class, 'fromGlobals'],
+            static function () {
+                die('Failed to instantiate response');
+            }
+        )
+    );
 
-    $app = new Application(new FastRouteRouter(), $sm, new WhoopsErrorHandler($whoops, $whoopsHandler));
+    //////////////////////////////////////////////////////////
+    // Error handling, renders errors (in a simplistic way) //
+    //////////////////////////////////////////////////////////
 
-    $app->pipeRoutingMiddleware();
+    $app->pipe(new class implements MiddlewareInterface {
+        public function process(Request $request, RequestHandlerInterface $handler) : Response
+        {
+            try {
+                return $handler->handle($request);
+            } catch (\Throwable $exception) {
+                $errorMessages = [];
 
-    $app->get('/', function (Request $request, Response $response) : Response {
-        ob_start();
-        require __DIR__ . '/../template/index.php';
-        $content = ob_get_clean();
+                do {
+                    $errorMessages[] .= 'Error #' . count($errorMessages) . ': ' . get_class($exception) . "\n"
+                        . 'Message: ' . $exception->getMessage() . "\n"
+                        . 'Trace: ' . $exception->getTraceAsString() . "\n";
 
-        $response->getBody()->write($content);
+                    $exception = $exception->getPrevious();
+                } while ($exception !== null);
 
-        return $response;
+                $response = (new DiactorosResponse())
+                    ->withStatus(500);
+
+                $response->getBody()->write(implode("\n-------\nPREVIOUS:\n", $errorMessages));
+
+                return $response;
+            }
+        }
     });
 
-    $app->post('/register-new-building', function (Request $request, Response $response) use ($sm) : Response {
-        $commandBus = $sm->get(CommandBus::class);
-        $commandBus->dispatch(Command\RegisterNewBuilding::fromName($request->getParsedBody()['name']));
+    $app->pipe(new RouteMiddleware($router));
 
-        return $response->withAddedHeader('Location', '/');
+    //////////////////////////////////////////////////////////////
+    // Actual routes here: from here on, it's application logic //
+    //////////////////////////////////////////////////////////////
+
+
+    $app->get('/', new class implements RequestHandlerInterface {
+        public function handle(Request $request) : Response
+        {
+            ob_start();
+            require __DIR__ . '/../template/index.php';
+            $content = ob_get_clean();
+
+            $response = new DiactorosResponse();
+
+            $response->getBody()->write($content);
+
+            return $response;
+        }
     });
 
-    $app->get('/building/{buildingId}', function (Request $request, Response $response) : Response {
-        $buildingId = Uuid::fromString($request->getAttribute('buildingId'));
+    $app->post('/register-new-building', new class ($serviceContainer->get(CommandBus::class)) implements RequestHandlerInterface {
+        /** @var CommandBus */
+        private $commandBus;
 
-        ob_start();
-        require __DIR__ . '/../template/building.php';
-        $content = ob_get_clean();
+        public function __construct(CommandBus $commandBus)
+        {
+            $this->commandBus = $commandBus;
+        }
 
-        $response->getBody()->write($content);
+        public function handle(Request $request) : Response
+        {
+            $this->commandBus->dispatch(Command\RegisterNewBuilding::fromName($request->getParsedBody()['name']));
 
-        return $response;
+            return (new DiactorosResponse())
+                ->withStatus(302)
+                ->withAddedHeader('Location', '/');
+        }
     });
 
-    $app->post('/checkin/{buildingId}', function (Request $request, Response $response) use ($sm) : Response {
+    $app->get('/building/{buildingId}', new class () implements RequestHandlerInterface {
+        public function handle(Request $request) : Response
+        {
+            $buildingId = Uuid::fromString($request->getAttribute('buildingId'));
 
+            ob_start();
+            require __DIR__ . '/../template/building.php';
+            $content = ob_get_clean();
+
+            $response = new DiactorosResponse();
+
+            $response->getBody()->write($content);
+
+            return $response;
+        }
     });
 
-    $app->post('/checkout/{buildingId}', function (Request $request, Response $response) use ($sm) : Response {
+    $app->post('/checkin/{buildingId}', new class () implements RequestHandlerInterface {
+        public function handle(Request $request) : Response
+        {
 
+        }
     });
 
-    $app->pipeDispatchMiddleware();
 
-    $whoops->register();
+    $app->post('/checkout/{buildingId}', new class () implements RequestHandlerInterface {
+        public function handle(Request $request) : Response
+        {
+
+        }
+    });
+
+    $app->pipe(new DispatchMiddleware());
+
     $app->run();
 });
