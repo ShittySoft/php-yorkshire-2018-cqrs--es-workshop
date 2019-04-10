@@ -9,6 +9,6 @@ use Rhumsaa\Uuid\Uuid;
 
 interface BuildingRepositoryInterface
 {
-    public function add(Building $building);
+    public function add(Building $building) : void;
     public function get(Uuid $id) : Building;
 }

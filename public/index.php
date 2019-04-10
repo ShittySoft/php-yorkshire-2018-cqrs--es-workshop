@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Building\App;
 
+use function assert;
 use Building\Domain\Command;
 use Prooph\ServiceBus\CommandBus;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -64,7 +65,7 @@ call_user_func(function () {
                 $errorMessages = [];
 
                 do {
-                    $errorMessages[] .= 'Error #' . count($errorMessages) . ': ' . get_class($exception) . "\n"
+                    $errorMessages[] = 'Error #' . count($errorMessages) . ': ' . get_class($exception) . "\n"
                         . 'Message: ' . $exception->getMessage() . "\n"
                         . 'Trace: ' . $exception->getTraceAsString() . "\n";
 
@@ -95,6 +96,8 @@ call_user_func(function () {
             require __DIR__ . '/../template/index.php';
             $content = ob_get_clean();
 
+            assert(is_string($content));
+
             $response = new DiactorosResponse();
 
             $response->getBody()->write($content);
@@ -114,7 +117,11 @@ call_user_func(function () {
 
         public function handle(Request $request) : Response
         {
-            $this->commandBus->dispatch(Command\RegisterNewBuilding::fromName($request->getParsedBody()['name']));
+            $post = $request->getParsedBody();
+
+            assert(is_array($post));
+
+            $this->commandBus->dispatch(Command\RegisterNewBuilding::fromName($post['name']));
 
             return (new DiactorosResponse())
                 ->withStatus(302)
@@ -130,6 +137,8 @@ call_user_func(function () {
             ob_start();
             require __DIR__ . '/../template/building.php';
             $content = ob_get_clean();
+
+            assert(is_string($content));
 
             $response = new DiactorosResponse();
 
