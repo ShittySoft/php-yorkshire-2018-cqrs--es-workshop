@@ -1,0 +1,6 @@
+parameters:
+	level: 7
+	paths:
+		- public
+		- src
+		- container.php
