@@ -6,12 +6,13 @@ namespace Building\App;
 
 use Building\Domain\Aggregate\Building;
 use Building\Domain\Command;
-use Building\Domain\Repository\BuildingRepositoryInterface;
-use Building\Infrastructure\Repository\BuildingRepository;
+use Building\Domain\Repository\Buildings;
+use Building\Infrastructure\Repository\BuildingsFromAggregateRepository;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Driver\PDOSqlite\Driver;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Schema\SchemaException;
+use Interop\Container\ContainerInterface as InteropContainer;
 use Prooph\Common\Event\ActionEvent;
 use Prooph\Common\Event\ActionEventEmitter;
 use Prooph\Common\Event\ActionEventListenerAggregate;
@@ -38,7 +39,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 return new ServiceManager([
     'factories' => [
-        Connection::class => function () {
+        Connection::class => static function () {
             $connection = DriverManager::getConnection([
                 'driverClass' => Driver::class,
                 'path'        => __DIR__ . '/data/db.sqlite3',
@@ -58,7 +59,7 @@ return new ServiceManager([
             return $connection;
         },
 
-        EventStore::class                  => function (ContainerInterface $container) {
+        EventStore::class => static function (ContainerInterface $container) {
             $eventBus   = new EventBus();
             $eventStore = new EventStore(
                 new DoctrineEventStoreAdapter(
@@ -70,7 +71,11 @@ return new ServiceManager([
                 new ProophActionEventEmitter()
             );
 
-            // This listener forwards events to a listener service called exactly like the event.
+            // This listener forwards events to a listener service called exactly like:
+            //
+            //  * `get_class($event) . '-listeners'.
+            //  * `get_class($event) . '-projectors'.
+            //
             // Please note that the service must be a {{@see callable[]}}
             $eventBus->utilize(new class ($container, $container) implements ActionEventListenerAggregate
             {
@@ -92,17 +97,17 @@ return new ServiceManager([
                     $this->projectors    = $projectors;
                 }
 
-                public function attach(ActionEventEmitter $dispatcher)
+                public function attach(ActionEventEmitter $dispatcher) : void
                 {
                     $dispatcher->attachListener(MessageBus::EVENT_ROUTE, [$this, 'onRoute']);
                 }
 
-                public function detach(ActionEventEmitter $dispatcher)
+                public function detach(ActionEventEmitter $dispatcher) : void
                 {
                     throw new \BadMethodCallException('Not implemented');
                 }
 
-                public function onRoute(ActionEvent $actionEvent)
+                public function onRoute(ActionEvent $actionEvent) : void
                 {
                     $messageName = (string) $actionEvent->getParam(MessageBus::EVENT_PARAM_MESSAGE_NAME);
 
@@ -119,7 +124,7 @@ return new ServiceManager([
                         $handlers = array_merge($handlers, $this->eventHandlers->get($listeners));
                     }
 
-                    if ($handlers) {
+                    if ($handlers !== []) {
                         $actionEvent->setParam(EventBus::EVENT_PARAM_EVENT_LISTENERS, $handlers);
                     }
                 }
@@ -130,24 +135,25 @@ return new ServiceManager([
             return $eventStore;
         },
 
-        CommandBus::class                  => function (ContainerInterface $container) : CommandBus {
+        CommandBus::class                  => static function (InteropContainer $container) : CommandBus {
             $commandBus = new CommandBus();
 
             // Following configuration makes sure that commands are dispatched by command handler services
             // called exactly like the command class name. The handler must be a {{@see callable}}.
             $commandBus->utilize(new ServiceLocatorPlugin($container));
-            $commandBus->utilize(new class implements ActionEventListenerAggregate {
-                public function attach(ActionEventEmitter $dispatcher)
+            $commandBus->utilize(new class implements ActionEventListenerAggregate
+            {
+                public function attach(ActionEventEmitter $dispatcher) : void
                 {
                     $dispatcher->attachListener(MessageBus::EVENT_ROUTE, [$this, 'onRoute']);
                 }
 
-                public function detach(ActionEventEmitter $dispatcher)
+                public function detach(ActionEventEmitter $dispatcher) : void
                 {
                     throw new \BadMethodCallException('Not implemented');
                 }
 
-                public function onRoute(ActionEvent $actionEvent)
+                public function onRoute(ActionEvent $actionEvent) : void
                 {
                     $actionEvent->setParam(
                         MessageBus::EVENT_PARAM_MESSAGE_HANDLER,
@@ -167,18 +173,18 @@ return new ServiceManager([
         // Command -> CommandHandlerFactory
         // this is where most of the work will be done (by you!)
         // Each command is a `function (CommandClass) : void`
-        Command\RegisterNewBuilding::class => function (ContainerInterface $container) : callable {
-            $buildings = $container->get(BuildingRepositoryInterface::class);
+        Command\RegisterNewBuilding::class => static function (ContainerInterface $container) : callable {
+            $buildings = $container->get(Buildings::class);
 
-            return function (Command\RegisterNewBuilding $command) use ($buildings) {
+            return static function (Command\RegisterNewBuilding $command) use ($buildings) {
                 $buildings->add(Building::new($command->name()));
             };
         },
 
-
         // Our concrete repository implementation
-        BuildingRepositoryInterface::class => function (ContainerInterface $container) : BuildingRepositoryInterface {
-            return new BuildingRepository(
+        Buildings::class                   => static function (ContainerInterface $container
+        ) : Buildings {
+            return new BuildingsFromAggregateRepository(
                 new AggregateRepository(
                     $container->get(EventStore::class),
                     AggregateType::fromAggregateRootClass(Building::class),

@@ -10,14 +10,10 @@ use Rhumsaa\Uuid\Uuid;
 
 final class Building extends AggregateRoot
 {
-    /**
-     * @var Uuid
-     */
+    /** @var Uuid */
     private $uuid;
 
-    /**
-     * @var string
-     */
+    /** @var string */
     private $name;
 
     public static function new(string $name) : self
@@ -34,17 +30,17 @@ final class Building extends AggregateRoot
         return $self;
     }
 
-    public function checkInUser(string $username)
+    public function checkInUser(string $username) : void
     {
         // @TODO to be implemented
     }
 
-    public function checkOutUser(string $username)
+    public function checkOutUser(string $username) : void
     {
         // @TODO to be implemented
     }
 
-    public function whenNewBuildingWasRegistered(NewBuildingWasRegistered $event)
+    protected function whenNewBuildingWasRegistered(NewBuildingWasRegistered $event) : void
     {
         $this->uuid = Uuid::fromString($event->aggregateId());
         $this->name = $event->name();

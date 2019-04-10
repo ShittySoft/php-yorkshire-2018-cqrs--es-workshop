@@ -5,15 +5,14 @@ declare(strict_types=1);
 namespace Building\Infrastructure\Repository;
 
 use Building\Domain\Aggregate\Building;
-use Building\Domain\Repository\BuildingRepositoryInterface;
+use Building\Domain\Repository\Buildings;
 use Prooph\EventStore\Aggregate\AggregateRepository;
 use Rhumsaa\Uuid\Uuid;
+use function assert;
 
-final class BuildingRepository implements BuildingRepositoryInterface
+final class BuildingsFromAggregateRepository implements Buildings
 {
-    /**
-     * @var AggregateRepository
-     */
+    /** @var AggregateRepository */
     private $aggregateRepository;
 
     public function __construct(AggregateRepository $aggregateRepository)
@@ -21,13 +20,17 @@ final class BuildingRepository implements BuildingRepositoryInterface
         $this->aggregateRepository = $aggregateRepository;
     }
 
-    public function add(Building $building)
+    public function add(Building $building) : void
     {
         $this->aggregateRepository->addAggregateRoot($building);
     }
 
     public function get(Uuid $id) : Building
     {
-        return $this->aggregateRepository->getAggregateRoot($id->toString());
+        $aggregate = $this->aggregateRepository->getAggregateRoot($id->toString());
+
+        assert($aggregate instanceof Building, 'Retrieved object should always be of type ' . Building::class);
+
+        return $aggregate;
     }
 }
