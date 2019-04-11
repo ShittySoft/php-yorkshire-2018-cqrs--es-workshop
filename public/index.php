@@ -185,7 +185,17 @@ call_user_func(function () {
 
         public function handle(Request $request) : Response
         {
+            $buildingId = Uuid::fromString($request->getAttribute('buildingId'));
 
+            $post = $request->getParsedBody();
+
+            assert(is_array($post));
+
+            $this->commandBus->dispatch(Command\CheckOutUser::fromBuilding($buildingId, $post['username']));
+
+            return (new DiactorosResponse())
+                ->withStatus(302)
+                ->withAddedHeader('Location', '/building/' . $buildingId->toString());
         }
     });
 

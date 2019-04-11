@@ -191,6 +191,16 @@ return new ServiceManager([
             };
         },
 
+        Command\CheckOutUser::class => static function (ContainerInterface $container) : callable {
+            $buildings = $container->get(Buildings::class);
+
+            return static function (Command\CheckOutUser $command) use ($buildings) {
+                $buildings
+                    ->get($command->buildingId())
+                    ->checkOutUser($command->username());
+            };
+        },
+
 
         // Our concrete repository implementation
         Buildings::class                   => static function (ContainerInterface $container
