@@ -181,6 +181,17 @@ return new ServiceManager([
             };
         },
 
+        Command\CheckInUser::class => static function (ContainerInterface $container) : callable {
+            $buildings = $container->get(Buildings::class);
+
+            return static function (Command\CheckInUser $command) use ($buildings) {
+                $buildings
+                    ->get($command->buildingId())
+                    ->checkInUser($command->username());
+            };
+        },
+
+
         // Our concrete repository implementation
         Buildings::class                   => static function (ContainerInterface $container
         ) : Buildings {
