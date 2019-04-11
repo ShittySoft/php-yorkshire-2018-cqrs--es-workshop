@@ -7,6 +7,9 @@ namespace Building\App;
 use Building\Domain\Aggregate\Building;
 use Building\Domain\Command;
 use Building\Domain\DomainEvent\CheckInAnomalyDetected;
+use Building\Domain\DomainEvent\NewBuildingWasRegistered;
+use Building\Domain\DomainEvent\UserCheckedIn;
+use Building\Domain\DomainEvent\UserCheckedOut;
 use Building\Domain\Repository\Buildings;
 use Building\Infrastructure\Repository\BuildingsFromAggregateRepository;
 use Doctrine\DBAL\Connection;
@@ -20,6 +23,7 @@ use Prooph\Common\Event\ActionEventListenerAggregate;
 use Prooph\Common\Event\ProophActionEventEmitter;
 use Prooph\Common\Messaging\FQCNMessageFactory;
 use Prooph\Common\Messaging\NoOpMessageConverter;
+use Prooph\EventSourcing\AggregateChanged;
 use Prooph\EventSourcing\EventStoreIntegration\AggregateTranslator;
 use Prooph\EventStore\Adapter\Doctrine\DoctrineEventStoreAdapter;
 use Prooph\EventStore\Adapter\Doctrine\Schema\EventStoreSchema;
@@ -27,6 +31,7 @@ use Prooph\EventStore\Adapter\PayloadSerializer\JsonPayloadSerializer;
 use Prooph\EventStore\Aggregate\AggregateRepository;
 use Prooph\EventStore\Aggregate\AggregateType;
 use Prooph\EventStore\EventStore;
+use Prooph\EventStore\Stream\StreamName;
 use Prooph\EventStoreBusBridge\EventPublisher;
 use Prooph\EventStoreBusBridge\TransactionManager;
 use Prooph\ServiceBus\CommandBus;
@@ -212,6 +217,24 @@ return new ServiceManager([
             };
         },
 
+        NewBuildingWasRegistered::class . '-projectors' => static function (ContainerInterface $container) : array {
+            return [
+                $container->get('project-all-checked-in-users'),
+            ];
+        },
+
+        UserCheckedIn::class . '-projectors' => static function (ContainerInterface $container) : array {
+            return [
+                $container->get('project-all-checked-in-users'),
+            ];
+        },
+
+        UserCheckedOut::class . '-projectors' => static function (ContainerInterface $container) : array {
+            return [
+                $container->get('project-all-checked-in-users'),
+            ];
+        },
+
         CheckInAnomalyDetected::class . '-listeners' => static function (ContainerInterface $container) : array {
             $commandBus = $container->get(CommandBus::class);
 
@@ -223,6 +246,40 @@ return new ServiceManager([
                     ));
                 },
             ];
+        },
+
+        'project-all-checked-in-users' => function (ContainerInterface $container) : callable {
+            $eventStore = $container->get(EventStore::class);
+
+            return static function () use ($eventStore) : void {
+                /** @var AggregateChanged[] $allHistory */
+                $allHistory = $eventStore->loadEventsByMetadataFrom(
+                    new StreamName('event_stream'),
+                    [
+                        'aggregate_type' => Building::class,
+                    ]
+                );
+
+                $allBuildings = [];
+
+                foreach ($allHistory as $event) {
+                    if (! array_key_exists($event->aggregateId(), $allBuildings)) {
+                        $allBuildings[$event->aggregateId()] = [];
+                    }
+
+                    if ($event instanceof UserCheckedIn) {
+                        $allBuildings[$event->aggregateId()][$event->username()] = null;
+                    }
+
+                    if ($event instanceof UserCheckedOut) {
+                        unset($allBuildings[$event->aggregateId()][$event->username()]);
+                    }
+                }
+
+                array_walk($allBuildings, function (array $usernames, string $buildingId) : void {
+                    file_put_contents(__DIR__ . '/public/' . $buildingId . '.json', json_encode(array_keys($usernames)));
+                });
+            };
         },
 
 

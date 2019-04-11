@@ -25,7 +25,7 @@ use Zend\HttpHandlerRunner\Emitter\SapiEmitter;
 use Zend\HttpHandlerRunner\RequestHandlerRunner;
 use Zend\Stratigility\MiddlewarePipe;
 
-call_user_func(function () {
+(function () {
     error_reporting(E_ALL);
     ini_set('display_errors', '1');
 
@@ -202,4 +202,4 @@ call_user_func(function () {
     $app->pipe(new DispatchMiddleware());
 
     $app->run();
-});
+})();
