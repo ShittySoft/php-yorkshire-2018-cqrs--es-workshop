@@ -6,6 +6,7 @@ namespace Building\App;
 
 use Building\Domain\Aggregate\Building;
 use Building\Domain\Command;
+use Building\Domain\DomainEvent\CheckInAnomalyDetected;
 use Building\Domain\Repository\Buildings;
 use Building\Infrastructure\Repository\BuildingsFromAggregateRepository;
 use Doctrine\DBAL\Connection;
@@ -199,6 +200,29 @@ return new ServiceManager([
                     ->get($command->buildingId())
                     ->checkOutUser($command->username());
             };
+        },
+
+        Command\NotifySecurityOfCheckInAnomaly::class => static function (ContainerInterface $container) : callable {
+            return static function (Command\NotifySecurityOfCheckInAnomaly $command) {
+                \error_log(sprintf(
+                    'Check-in anomaly detected in building %s, caused by user %s',
+                    $command->buildingId()->toString(),
+                    $command->username()
+                ));
+            };
+        },
+
+        CheckInAnomalyDetected::class . '-listeners' => static function (ContainerInterface $container) : array {
+            $commandBus = $container->get(CommandBus::class);
+
+            return [
+                function (CheckInAnomalyDetected $event) use ($commandBus) : void {
+                    $commandBus->dispatch(Command\NotifySecurityOfCheckInAnomaly::inBuilding(
+                        $event->buildingId(),
+                        $event->username()
+                    ));
+                },
+            ];
         },
 
 
