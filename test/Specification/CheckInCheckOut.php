@@ -7,6 +7,7 @@ namespace Specification;
 use Assert\Assert;
 use Behat\Behat\Context\Context;
 use Building\Domain\Aggregate\Building;
+use Building\Domain\DomainEvent\CheckInAnomalyDetected;
 use Building\Domain\DomainEvent\NewBuildingWasRegistered;
 use Building\Domain\DomainEvent\UserCheckedIn;
 use Prooph\EventSourcing\AggregateChanged;
@@ -39,6 +40,12 @@ final class CheckInCheckOut implements Context
         $this->recordPastEvent(NewBuildingWasRegistered::occur($this->buildingId->toString(), ['name' => 'Potato']));
     }
 
+    /** @Given /^"([^"]+)" checked into the building$/ */
+    public function user_checked_into_the_building(string $username) : void
+    {
+        $this->recordPastEvent(UserCheckedIn::toBuilding($this->buildingId, $username));
+    }
+
     /** @When /^"([^"]+)" checks into the building$/ */
     public function user_checks_into_the_building(string $username) : void
     {
@@ -54,6 +61,16 @@ final class CheckInCheckOut implements Context
         $lastEvent = $this->popNextRecordedEvent();
 
         Assert::that($lastEvent)->isInstanceOf(UserCheckedIn::class);
+        Assert::that($lastEvent->username())->same($username);
+    }
+
+    /** @Then /^a check-in anomaly caused by "([^"]+)" should have been detected$/ */
+    public function a_check_in_anomaly_caused_by_user_should_have_been_detected(string $username) : void
+    {
+        /** @var CheckInAnomalyDetected $lastEvent */
+        $lastEvent = $this->popNextRecordedEvent();
+
+        Assert::that($lastEvent)->isInstanceOf(CheckInAnomalyDetected::class);
         Assert::that($lastEvent->username())->same($username);
     }
 
