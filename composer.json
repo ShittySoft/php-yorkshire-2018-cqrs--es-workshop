@@ -26,7 +26,8 @@
   },
   "autoload": {
     "psr-4": {
-      "Building\\": "src/"
+      "Building\\": "old-src/",
+      "Toll\\": "src/Toll"
     }
   },
   "scripts": {
