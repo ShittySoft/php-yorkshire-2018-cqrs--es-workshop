@@ -8,6 +8,7 @@ use Building\Domain\DomainEvent\CheckInAnomalyDetected;
 use Building\Domain\DomainEvent\NewBuildingWasRegistered;
 use Building\Domain\DomainEvent\UserCheckedIn;
 use Building\Domain\DomainEvent\UserCheckedOut;
+use Building\Domain\ReadModel\UserIsWhitelisted;
 use Prooph\EventSourcing\AggregateRoot;
 use Rhumsaa\Uuid\Uuid;
 
@@ -36,8 +37,12 @@ final class Building extends AggregateRoot
         return $self;
     }
 
-    public function checkInUser(string $username) : void
+    public function checkInUser(string $username, UserIsWhitelisted $whitelist) : void
     {
+        if (! $whitelist->__invoke($username)) {
+            throw new \DomainException(sprintf('User "%s" is not allowed to check into "%s"', $username, $this->name));
+        }
+
         $anomalyDetected = array_key_exists($username, $this->checkedInUsers);
 
         $this->recordThat(UserCheckedIn::toBuilding($this->uuid, $username));

@@ -11,6 +11,7 @@ use Building\Domain\DomainEvent\NewBuildingWasRegistered;
 use Building\Domain\DomainEvent\UserCheckedIn;
 use Building\Domain\DomainEvent\UserCheckedOut;
 use Building\Domain\Repository\Buildings;
+use Building\Infrastructure\ReadModel\HardcodedUserIsWhitelisted;
 use Building\Infrastructure\Repository\BuildingsFromAggregateRepository;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Driver\PDOSqlite\Driver;
@@ -193,7 +194,7 @@ return new ServiceManager([
             return static function (Command\CheckInUser $command) use ($buildings) {
                 $buildings
                     ->get($command->buildingId())
-                    ->checkInUser($command->username());
+                    ->checkInUser($command->username(), new HardcodedUserIsWhitelisted());
             };
         },
 

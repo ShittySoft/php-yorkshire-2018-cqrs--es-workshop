@@ -10,6 +10,7 @@ use Building\Domain\Aggregate\Building;
 use Building\Domain\DomainEvent\CheckInAnomalyDetected;
 use Building\Domain\DomainEvent\NewBuildingWasRegistered;
 use Building\Domain\DomainEvent\UserCheckedIn;
+use Building\Infrastructure\ReadModel\HardcodedUserIsWhitelisted;
 use Prooph\EventSourcing\AggregateChanged;
 use Prooph\EventSourcing\EventStoreIntegration\AggregateTranslator;
 use Prooph\EventStore\Aggregate\AggregateType;
@@ -51,7 +52,7 @@ final class CheckInCheckOut implements Context
     {
         $this
             ->building()
-            ->checkInUser($username);
+            ->checkInUser($username, new HardcodedUserIsWhitelisted());
     }
 
     /** @Then /^"([^"]+)" should have been checked into the building$/ */
